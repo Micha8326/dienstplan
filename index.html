@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dienstplan · Liqstorm</title>
+<meta name="description" content="Dienstplan fotografieren, automatisch erkennen lassen und als eigenen Kalender pflegen.">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#05080e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dienstplan">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="assets/fonts.css">
+<style>
+  :root{
+    --bg:#05080e;
+    --bg-2:#0a101a;
+    --panel:rgba(14,22,34,.72);
+    --panel-2:rgba(20,30,46,.85);
+    --line:rgba(120,160,210,.14);
+    --line-2:rgba(120,160,210,.26);
+    --text:#e6edf6;
+    --muted:#8a9ab0;
+    --bull:#38bdf8;
+    --bear:#f43f5e;
+    --gold:#ffc94d;
+    --radius:14px;
+    --nav-h:68px;
+  }
+  *{box-sizing:border-box;}
+  [hidden]{display:none!important;}
+  html,body{height:100%;}
+  body{
+    margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.5 Inter,"Segoe UI",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;overflow-x:hidden;
+    -webkit-tap-highlight-color:transparent;
+  }
+  button,input,select,textarea{font:inherit;color:inherit;}
+  h1,h2,h3,.brand,.eyebrow,.btn,.tab,.hud{font-family:Rajdhani,Inter,sans-serif;letter-spacing:.04em;}
+
+  #sparks{position:fixed;inset:0;z-index:0;pointer-events:none;}
+  .glow{position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(60vw 60vh at 12% 18%, rgba(56,189,248,.13), transparent 60%),
+      radial-gradient(60vw 60vh at 88% 22%, rgba(244,63,94,.10), transparent 60%),
+      radial-gradient(80vw 50vh at 50% 110%, rgba(255,201,77,.07), transparent 70%);}
+  .grid-bg{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.35;
+    background-image:linear-gradient(rgba(120,160,210,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(120,160,210,.05) 1px,transparent 1px);
+    background-size:44px 44px;mask-image:radial-gradient(ellipse at 50% 30%,#000 30%,transparent 75%);}
+
+  .app{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:0 16px calc(var(--nav-h) + 28px + env(safe-area-inset-bottom));}
+
+  /* header */
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 6px;padding-top:calc(16px + env(safe-area-inset-top));}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:21px;text-decoration:none;color:inherit;}
+  .brand img{width:30px;height:30px;}
+  .brand small{display:block;font-size:11px;letter-spacing:.28em;color:var(--gold);font-weight:600;margin-top:-4px;}
+  .pill{font-family:Rajdhani,sans-serif;font-weight:600;font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--gold);border:1px solid rgba(255,201,77,.35);border-radius:999px;padding:4px 11px;white-space:nowrap;}
+  .pill.ok{color:#34d399;border-color:rgba(52,211,153,.35);}
+  .pill.warn{color:var(--muted);border-color:var(--line-2);}
+
+  .eyebrow{color:var(--gold);font-weight:600;font-size:13px;letter-spacing:.24em;text-transform:uppercase;margin:0 0 4px;}
+  h2{font-size:clamp(26px,5vw,36px);line-height:1.1;margin:0 0 6px;font-weight:700;}
+  .sub{color:var(--muted);margin:0 0 18px;max-width:620px;}
+
+  /* panels with HUD corners */
+  .panel{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
+  .panel.hud-corners::before,.panel.hud-corners::after{content:"";position:absolute;width:16px;height:16px;border:2px solid rgba(255,201,77,.55);pointer-events:none;}
+  .panel.hud-corners::before{top:-1px;left:-1px;border-right:0;border-bottom:0;border-top-left-radius:var(--radius);}
+  .panel.hud-corners::after{bottom:-1px;right:-1px;border-left:0;border-top:0;border-bottom-right-radius:var(--radius);}
+  .stack{display:grid;gap:14px;}
+
+  /* buttons */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:600;font-size:15px;letter-spacing:.1em;text-transform:uppercase;
+    border-radius:10px;padding:10px 16px;border:1px solid var(--line-2);background:transparent;cursor:pointer;transition:background .2s,border-color .2s,color .2s,box-shadow .2s;text-decoration:none;white-space:nowrap;}
+  .btn:hover{border-color:rgba(255,201,77,.5);color:var(--gold);}
+  .btn.gold{color:var(--gold);border-color:rgba(255,201,77,.45);background:rgba(255,201,77,.08);}
+  .btn.gold:hover{background:rgba(255,201,77,.16);box-shadow:0 0 24px rgba(255,201,77,.18);}
+  .btn.bull{color:var(--bull);border-color:rgba(56,189,248,.45);background:rgba(56,189,248,.08);}
+  .btn.bull:hover{background:rgba(56,189,248,.16);box-shadow:0 0 24px rgba(56,189,248,.2);color:var(--bull);}
+  .btn.bear{color:var(--bear);border-color:rgba(244,63,94,.4);background:rgba(244,63,94,.06);}
+  .btn.bear:hover{background:rgba(244,63,94,.14);color:var(--bear);}
+  .btn.icon{padding:8px 12px;font-size:18px;line-height:1;}
+  .btn.block{width:100%;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;}
+  .btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+  .row.end{justify-content:flex-end;}
+  .row.between{justify-content:space-between;}
+
+  /* form */
+  label.f{display:grid;gap:6px;font-size:13px;color:var(--muted);}
+  label.f > span{font-family:Rajdhani,sans-serif;font-weight:600;letter-spacing:.14em;text-transform:uppercase;font-size:12px;}
+  input[type=text],input[type=password],input[type=time],input[type=number],select,textarea{
+    width:100%;background:rgba(5,8,14,.7);border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;color:var(--text);outline:none;transition:border-color .2s,box-shadow .2s;}
+  input:focus,select:focus,textarea:focus{border-color:rgba(56,189,248,.6);box-shadow:0 0 0 3px rgba(56,189,248,.12);}
+  input[type=color]{width:44px;height:40px;border:1px solid var(--line-2);border-radius:10px;background:transparent;padding:3px;cursor:pointer;}
+  textarea{min-height:72px;resize:vertical;}
+  .hint{font-size:12.5px;color:var(--muted);}
+  .hint a{color:var(--bull);}
+  .check{display:flex;align-items:center;gap:10px;color:#c2cedd;font-size:14px;cursor:pointer;}
+  .check input{width:18px;height:18px;accent-color:var(--gold);}
+  .seg{display:inline-flex;border:1px solid var(--line-2);border-radius:10px;overflow:hidden;}
+  .seg button{background:transparent;border:0;padding:8px 14px;cursor:pointer;font-family:Rajdhani,sans-serif;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+  .seg button.on{background:rgba(255,201,77,.12);color:var(--gold);}
+  .seg.wide{display:grid;grid-template-columns:1fr 1fr;width:100%;}
+  .seg.wide button{padding:11px 8px;font-size:15px;}
+  .fallback{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border:1px solid rgba(255,201,77,.35);background:rgba(255,201,77,.05);border-radius:10px;padding:10px 12px;font-size:14px;color:#c2cedd;}
+  .fallback[hidden]{display:none;}
+  .codepick.brush button.erase{--c:#8a9ab0;}
+  #manualCal .day{min-height:62px;}
+  #manualCal .day.set{border-color:color-mix(in srgb,var(--c) 55%,transparent);background:color-mix(in srgb,var(--c) 9%,rgba(10,16,26,.66));}
+
+  /* views */
+  .view{display:none;animation:in .35s ease;}
+  .view.on{display:block;}
+  @keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  /* month bar */
+  .monthbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 14px;}
+  .monthbar h2{margin:0;text-align:center;flex:1;}
+  .monthbar h2 small{display:block;font-size:13px;letter-spacing:.3em;color:var(--muted);font-weight:600;}
+
+  /* stats */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+  .stat{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:10px 12px;}
+  .stat b{display:block;font-family:Rajdhani,sans-serif;font-size:26px;line-height:1.05;}
+  .stat small{color:var(--muted);font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-weight:600;}
+  .stat.h b{color:var(--gold);text-shadow:0 0 18px rgba(255,201,77,.35);}
+  .stat.w b{color:var(--bull);}
+  .stat.o b{color:#c2cedd;}
+  .stat.u b{color:var(--bear);}
+
+  /* calendar */
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .dow{font-family:Rajdhani,sans-serif;font-weight:600;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);text-align:center;padding:2px 0 4px;}
+  .dow.we{color:rgba(244,63,94,.75);}
+  .day{position:relative;min-height:86px;border-radius:11px;border:1px solid var(--line);background:rgba(10,16,26,.66);padding:6px 6px 7px;cursor:pointer;
+    display:flex;flex-direction:column;gap:4px;text-align:left;transition:transform .15s,border-color .2s,box-shadow .2s;overflow:hidden;}
+  .day:hover{border-color:rgba(255,201,77,.4);transform:translateY(-1px);}
+  .day.pad{visibility:hidden;}
+  .day .n{font-family:Rajdhani,sans-serif;font-weight:700;font-size:15px;line-height:1;color:#c2cedd;}
+  .day.we .n{color:rgba(244,63,94,.85);}
+  .day.today{border-color:rgba(255,201,77,.7);box-shadow:0 0 0 1px rgba(255,201,77,.25) inset,0 0 22px rgba(255,201,77,.15);}
+  .day.today .n{color:var(--gold);}
+  .day .code{align-self:flex-start;font-family:Rajdhani,sans-serif;font-weight:700;font-size:15px;letter-spacing:.06em;line-height:1;
+    padding:4px 8px;border-radius:7px;border:1px solid color-mix(in srgb,var(--c) 55%,transparent);color:var(--c);
+    background:color-mix(in srgb,var(--c) 14%,transparent);box-shadow:0 0 14px color-mix(in srgb,var(--c) 22%,transparent);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .day .t{font-size:11px;color:var(--muted);line-height:1.2;}
+  .day .flag{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;}
+  .day .flag.note{background:var(--bull);box-shadow:0 0 8px var(--bull);}
+  .day .flag.edit{background:var(--gold);box-shadow:0 0 8px var(--gold);right:16px;}
+  .day::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--c,transparent);opacity:.75;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
+  .legend span{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;color:#c2cedd;}
+  .legend i{width:10px;height:10px;border-radius:3px;background:var(--c);box-shadow:0 0 8px var(--c);}
+
+  .upcoming{margin-top:18px;}
+  .list{margin:0;padding:0;list-style:none;}
+  .list li{display:flex;gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line);}
+  .list li:last-child{border-bottom:0;}
+  .list .d{font-family:Rajdhani,sans-serif;font-weight:700;min-width:74px;color:#c2cedd;}
+  .list .d small{display:block;color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.18em;}
+  .list .c{font-family:Rajdhani,sans-serif;font-weight:700;color:var(--c);min-width:34px;text-align:center;border:1px solid color-mix(in srgb,var(--c) 50%,transparent);border-radius:7px;padding:2px 6px;}
+  .list .l{flex:1;color:#c2cedd;font-size:14px;}
+  .list .l small{display:block;color:var(--muted);font-size:12px;}
+
+  /* scan */
+  .drop{border:1.5px dashed rgba(56,189,248,.35);border-radius:var(--radius);padding:22px;text-align:center;background:rgba(56,189,248,.03);transition:border-color .2s,background .2s;}
+  .drop.over{border-color:var(--gold);background:rgba(255,201,77,.05);}
+  .drop p{margin:6px 0 14px;color:var(--muted);}
+  .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:14px;}
+  .thumb{position:relative;border-radius:11px;overflow:hidden;border:1px solid var(--line-2);aspect-ratio:3/4;background:#000;}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .thumb button{position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(5,8,14,.7);cursor:pointer;line-height:1;}
+  .thumb.scanning::after{content:"";position:absolute;left:0;right:0;height:30%;top:-30%;
+    background:linear-gradient(180deg,transparent,rgba(56,189,248,.35) 70%,rgba(255,201,77,.9) 98%,transparent);animation:scan 1.6s linear infinite;}
+  @keyframes scan{to{top:100%}}
+  .status{display:flex;gap:10px;align-items:center;font-family:Rajdhani,sans-serif;font-weight:600;letter-spacing:.1em;text-transform:uppercase;font-size:14px;color:var(--bull);}
+  .status.err{color:var(--bear);text-transform:none;letter-spacing:.02em;font-family:Inter,sans-serif;font-weight:400;}
+  .status.ok{color:#34d399;}
+  .spin{width:16px;height:16px;border-radius:50%;border:2px solid rgba(56,189,248,.25);border-top-color:var(--bull);animation:sp 0.8s linear infinite;}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+
+  .review{display:grid;gap:6px;}
+  .rv{display:grid;grid-template-columns:64px 1fr 92px 92px;gap:8px;align-items:center;padding:6px 8px;border-radius:10px;border:1px solid var(--line);background:rgba(10,16,26,.6);}
+  .rv.unsure{border-color:rgba(255,201,77,.55);background:rgba(255,201,77,.05);}
+  .rv.we .dd{color:rgba(244,63,94,.85);}
+  .rv .dd{font-family:Rajdhani,sans-serif;font-weight:700;line-height:1.1;}
+  .rv .dd small{display:block;font-size:11px;color:var(--muted);letter-spacing:.14em;}
+  .rv select,.rv input{padding:7px 8px;}
+  .notes{border-left:2px solid var(--gold);padding:6px 12px;color:#c2cedd;font-size:14px;background:rgba(255,201,77,.04);border-radius:0 8px 8px 0;}
+
+  /* codes */
+  .codes{display:grid;gap:8px;}
+  .cd{display:grid;grid-template-columns:44px 74px 1fr 96px 96px 104px 36px;gap:8px;align-items:center;}
+  .cd input[type=text].k{text-align:center;font-family:Rajdhani,sans-serif;font-weight:700;font-size:16px;color:var(--c);}
+  .cd .rm{background:transparent;border:1px solid var(--line-2);border-radius:9px;height:38px;cursor:pointer;color:var(--muted);}
+  .cd .rm:hover{color:var(--bear);border-color:rgba(244,63,94,.5);}
+  .cd-head{font-family:Rajdhani,sans-serif;font-weight:600;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);}
+
+  /* bottom nav */
+  nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:8px 12px calc(8px + env(safe-area-inset-bottom));
+    background:linear-gradient(180deg,rgba(5,8,14,.4),rgba(5,8,14,.94) 40%);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);}
+  nav.tabs .in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:3px;background:transparent;border:1px solid transparent;border-radius:12px;padding:7px 4px;cursor:pointer;
+    color:var(--muted);font-weight:600;font-size:12px;letter-spacing:.14em;text-transform:uppercase;transition:color .2s,background .2s,border-color .2s;}
+  .tab svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+  .tab.on{color:var(--gold);background:rgba(255,201,77,.07);border-color:rgba(255,201,77,.25);}
+  .tab.on svg{filter:drop-shadow(0 0 6px rgba(255,201,77,.6));}
+  .tab.scan-tab.on{color:var(--bull);background:rgba(56,189,248,.08);border-color:rgba(56,189,248,.3);}
+  .tab.scan-tab.on svg{filter:drop-shadow(0 0 6px rgba(56,189,248,.7));}
+
+  /* sheet */
+  .sheet{position:fixed;inset:0;z-index:40;display:none;align-items:flex-end;justify-content:center;background:rgba(2,4,8,.7);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);}
+  .sheet.open{display:flex;}
+  .sheet-box{width:min(560px,100%);max-height:92vh;overflow:auto;background:linear-gradient(180deg,#0d1522,#080d16);border:1px solid var(--line-2);border-bottom:0;
+    border-radius:20px 20px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -20px 80px rgba(0,0,0,.6),0 0 60px rgba(56,189,248,.06);animation:up .25s ease;}
+  @keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+  .sheet-box h3{margin:0;font-size:24px;}
+  .grab{width:44px;height:4px;border-radius:2px;background:var(--line-2);margin:-6px auto 12px;}
+  .codepick{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px;}
+  .codepick button{border-radius:10px;border:1px solid color-mix(in srgb,var(--c) 40%,transparent);background:color-mix(in srgb,var(--c) 8%,transparent);color:var(--c);
+    padding:9px 4px 7px;cursor:pointer;font-family:Rajdhani,sans-serif;font-weight:700;font-size:18px;line-height:1;transition:box-shadow .2s,background .2s;}
+  .codepick button small{display:block;font-family:Inter,sans-serif;font-weight:400;font-size:10.5px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .codepick button.on{background:color-mix(in srgb,var(--c) 22%,transparent);box-shadow:0 0 0 2px var(--c),0 0 22px color-mix(in srgb,var(--c) 40%,transparent);}
+
+  .toast{position:fixed;left:50%;bottom:calc(var(--nav-h) + 22px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);z-index:60;opacity:0;pointer-events:none;
+    background:rgba(13,21,34,.95);border:1px solid rgba(255,201,77,.4);color:var(--text);padding:10px 16px;border-radius:12px;font-size:14px;transition:opacity .25s,transform .25s;box-shadow:0 10px 40px rgba(0,0,0,.5);max-width:calc(100% - 32px);}
+  .toast.show{opacity:1;transform:translateX(-50%);}
+
+  .empty{text-align:center;padding:28px 10px;color:var(--muted);}
+  .empty b{display:block;font-family:Rajdhani,sans-serif;font-size:20px;color:var(--text);letter-spacing:.06em;margin-bottom:4px;}
+  hr.sep{border:0;border-top:1px solid var(--line);margin:4px 0;}
+  footer{color:var(--muted);font-size:12px;text-align:center;margin-top:28px;}
+  footer a{color:inherit;}
+
+  @media (max-width:720px){
+    .stats{grid-template-columns:repeat(2,1fr);}
+    .cd{grid-template-columns:44px 56px repeat(3,1fr) 38px;grid-template-areas:"col key label label label rm" "s s s e e kind";}
+    .cd .c-col{grid-area:col}.cd .c-key{grid-area:key}.cd .c-label{grid-area:label}.cd .c-s{grid-area:s}.cd .c-e{grid-area:e}.cd .c-kind{grid-area:kind;padding-left:6px;padding-right:2px}.cd .rm{grid-area:rm}
+    .cd{padding-bottom:10px;border-bottom:1px solid var(--line);}
+    .cd-head{display:none;}
+  }
+  @media (max-width:520px){
+    .app{padding-left:12px;padding-right:12px;}
+    .cal{gap:4px;}
+    .day{min-height:64px;padding:5px 4px 6px;border-radius:9px;}
+    .day .code{font-size:13px;padding:3px 5px;}
+    .day .t{display:none;}
+    .dow{font-size:10.5px;letter-spacing:.08em;}
+    .two{grid-template-columns:1fr;}
+    .two.keep{grid-template-columns:1fr 1fr;}
+    .rv{grid-template-columns:54px 1fr 1fr;grid-template-areas:"dd sel sel" "dd s e";gap:6px;padding:7px;}
+    .rv .dd{grid-area:dd}.rv select{grid-area:sel}.rv .s{grid-area:s}.rv .e{grid-area:e}
+    .rv select,.rv input{padding:7px 8px;font-size:14px;}
+    .brand small{display:none;}
+  }
+  @media (prefers-reduced-motion:reduce){ #sparks{display:none;} .view,.sheet-box{animation:none;} .thumb.scanning::after{animation-duration:4s;} }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+<div class="grid-bg"></div>
+<canvas id="sparks"></canvas>
+
+<div class="app">
+  <header>
+    <a class="brand" href="./"><img src="assets/logo.png" alt=""><span>DIENSTPLAN<small>LIQSTORM · SHIFT HUD</small></span></a>
+    <span class="pill warn" id="modePill">Offline</span>
+  </header>
+
+  <!-- PLAN -->
+  <section class="view on" id="view-plan">
+    <div class="monthbar">
+      <button class="btn icon" id="prevM" aria-label="Vorheriger Monat">‹</button>
+      <h2 id="monthTitle"></h2>
+      <button class="btn icon" id="nextM" aria-label="Nächster Monat">›</button>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="panel hud-corners">
+      <div class="cal" id="cal"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="row between" style="margin-top:14px">
+      <button class="btn" id="todayBtn">Heute</button>
+      <div class="row">
+        <button class="btn" id="manualFromPlan">Manuell eintragen</button>
+        <button class="btn bull" id="icsMonth"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>Kalender-Export</button>
+      </div>
+    </div>
+    <div class="panel upcoming">
+      <div class="eyebrow">Als Nächstes</div>
+      <ul class="list" id="upcoming"></ul>
+    </div>
+  </section>
+
+  <!-- SCAN -->
+  <section class="view" id="view-scan">
+    <div class="eyebrow">Eintragen</div>
+    <h2>Dienstplan eintragen.</h2>
+    <p class="sub">Monat wählen, dann den Plan fotografieren und erkennen lassen oder die Dienste von Hand eintragen. Beides landet in deinem Plan.</p>
+    <div class="stack">
+      <div class="panel hud-corners stack">
+        <div class="two keep">
+          <label class="f"><span>Monat</span><select id="scanMonth"></select></label>
+          <label class="f"><span>Jahr</span><input type="number" id="scanYear" min="2000" max="2100" inputmode="numeric"></label>
+        </div>
+        <div class="seg wide" id="entrySeg" role="tablist">
+          <button type="button" data-entry="photo" class="on">Foto-Erkennung</button>
+          <button type="button" data-entry="manual">Manuelle Eingabe</button>
+        </div>
+      </div>
+
+      <div class="panel hud-corners stack" id="photoPanel">
+        <label class="f"><span>Dein Name auf dem Plan</span><input type="text" id="scanName" placeholder="z. B. Müller, M." autocomplete="off"></label>
+        <div class="drop" id="drop">
+          <div class="eyebrow" style="margin:0">Fotos</div>
+          <p>Eine oder mehrere Seiten. Gerade von vorne, gut ausgeleuchtet, ganzer Plan im Bild.</p>
+          <div class="row" style="justify-content:center">
+            <button class="btn gold" id="camBtn"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z"/><circle cx="12" cy="13" r="3.5"/></svg>Foto aufnehmen</button>
+            <button class="btn" id="galBtn"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/></svg>Aus Galerie</button>
+          </div>
+          <input type="file" id="camInput" accept="image/*" capture="environment" hidden>
+          <input type="file" id="galInput" accept="image/*" multiple hidden>
+          <div class="thumbs" id="thumbs"></div>
+        </div>
+        <div class="row between">
+          <div class="status" id="scanStatus"></div>
+          <button class="btn bull" id="recognizeBtn" disabled><svg viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 011-1h2M17 4h2a1 1 0 011 1v2M20 17v2a1 1 0 01-1 1h-2M7 20H5a1 1 0 01-1-1v-2M7 12h10"/></svg>Erkennen</button>
+        </div>
+        <div class="fallback" id="scanFallback" hidden>
+          <span>Klappt die Erkennung nicht? Dann trag die Dienste einfach von Hand ein.</span>
+          <button type="button" class="btn gold" id="toManualBtn">Manuell eingeben</button>
+        </div>
+      </div>
+
+      <div class="panel hud-corners stack" id="manualPanel" hidden>
+        <div class="row between">
+          <div>
+            <div class="eyebrow">Manuelle Eingabe</div>
+            <h3 style="margin:0;font-size:22px" id="manualTitle"></h3>
+          </div>
+          <span class="pill" id="manualCount"></span>
+        </div>
+        <p class="hint" style="margin:0">Oben eine Dienstart antippen, dann die Tage antippen. Noch mal auf denselben Tag tippen nimmt den Dienst wieder weg. Abweichende Zeiten und Notizen trägst du danach im Plan am jeweiligen Tag ein.</p>
+        <div class="codepick brush" id="brush"></div>
+        <div class="cal" id="manualCal"></div>
+        <div class="row between">
+          <div class="row">
+            <button type="button" class="btn" id="fillFreeBtn">Leere Tage = Frei</button>
+            <button type="button" class="btn bear" id="manualClearBtn">Monat leeren</button>
+          </div>
+          <button type="button" class="btn gold" id="manualSaveBtn">In Dienstplan übernehmen</button>
+        </div>
+      </div>
+
+      <div class="panel stack" id="reviewPanel" hidden>
+        <div class="row between">
+          <div>
+            <div class="eyebrow">Prüfen</div>
+            <h3 style="margin:0;font-size:22px" id="reviewTitle"></h3>
+          </div>
+          <span class="pill" id="reviewCount"></span>
+        </div>
+        <div class="notes" id="reviewNotes" hidden></div>
+        <p class="hint" style="margin:0">Gold markierte Tage waren auf dem Foto unsicher. Bitte kurz gegenprüfen.</p>
+        <div class="review" id="review"></div>
+        <label class="check"><input type="checkbox" id="keepManual" checked>Von Hand geänderte Tage nicht überschreiben</label>
+        <div class="row end">
+          <button class="btn" id="discardBtn">Verwerfen</button>
+          <button class="btn gold" id="applyBtn">In Dienstplan übernehmen</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CODES -->
+  <section class="view" id="view-codes">
+    <div class="eyebrow">Schichten</div>
+    <h2>Deine Dienstarten.</h2>
+    <p class="sub">Die Kürzel so, wie sie auf deinem Plan stehen. Zeiten werden für Stunden und Kalender-Export genutzt. Über Nacht (z. B. 22:00 bis 06:00) wird automatisch erkannt.</p>
+    <div class="panel hud-corners stack">
+      <div class="cd cd-head"><span></span><span>Kürzel</span><span>Bezeichnung</span><span>Beginn</span><span>Ende</span><span>Art</span><span></span></div>
+      <div class="codes" id="codes"></div>
+      <div class="row between">
+        <button class="btn" id="addCode">+ Dienstart</button>
+        <button class="btn gold" id="saveCodes">Speichern</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="view" id="view-settings">
+    <div class="eyebrow">System</div>
+    <h2>Einstellungen.</h2>
+    <p class="sub">Alles bleibt auf diesem Gerät. Es gibt keinen Server und kein Konto.</p>
+    <div class="stack">
+      <div class="panel hud-corners stack">
+        <label class="f"><span>Dein Name auf dem Plan</span><input type="text" id="setName" placeholder="z. B. Müller, M." autocomplete="off"></label>
+        <p class="hint" style="margin-top:-6px">So, wie er in der Namensspalte steht. Mehrere Schreibweisen mit Komma trennen geht nicht, nimm die genaueste.</p>
+        <div class="f" style="display:grid;gap:6px">
+          <span class="hint" style="font-family:Rajdhani,sans-serif;font-weight:600;letter-spacing:.14em;text-transform:uppercase;font-size:12px">Erkennung</span>
+          <div class="seg" id="modeSeg"><button data-mode="claude">KI-Erkennung</button><button data-mode="offline">Offline-Texterkennung</button></div>
+          <p class="hint" id="modeHint"></p>
+        </div>
+        <div id="claudeBox" class="stack">
+          <label class="f"><span>Anthropic API-Schlüssel</span>
+            <div class="row" style="flex-wrap:nowrap"><input type="password" id="setKey" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"><button class="btn icon" id="showKey" type="button" aria-label="Schlüssel zeigen">👁</button></div>
+          </label>
+          <p class="hint" style="margin-top:-6px">Bekommst du unter <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. Wird nur in diesem Browser gespeichert und direkt an die Anthropic-API geschickt. Leg dir dort am besten ein kleines Ausgabenlimit fest.</p>
+          <label class="f"><span>Modell</span>
+            <select id="setModel">
+              <option value="claude-opus-5-5">Claude Opus 5.5 · genaueste Erkennung</option>
+              <option value="claude-sonnet-5-5">Claude Sonnet 5.5 · schneller, günstiger</option>
+              <option value="claude-haiku-4-5">Claude Haiku 4.5 · am günstigsten, ungenauer</option>
+            </select>
+          </label>
+        </div>
+        <div class="row end"><button class="btn gold" id="saveSettings">Speichern</button></div>
+      </div>
+
+      <div class="panel stack">
+        <div class="eyebrow">Daten</div>
+        <div class="row">
+          <button class="btn bull" id="icsAll">Alle Dienste als .ics</button>
+          <button class="btn" id="backupBtn">Backup speichern</button>
+          <button class="btn" id="restoreBtn">Backup laden</button>
+          <input type="file" id="restoreInput" accept="application/json,.json" hidden>
+        </div>
+        <p class="hint" style="margin:0">Die .ics-Datei kannst du in Google Kalender, Apple Kalender oder Outlook importieren. Erneuter Import aktualisiert die Termine statt sie zu verdoppeln.</p>
+        <hr class="sep">
+        <div class="row"><button class="btn bear" id="wipeBtn">Alle Daten löschen</button></div>
+      </div>
+    </div>
+    <footer>© 2026 Liqstorm · <a href="https://liqstorm.com/impressum.html">Impressum</a> · <a href="https://liqstorm.com/datenschutz.html">Datenschutz</a></footer>
+  </section>
+</div>
+
+<nav class="tabs">
+  <div class="in">
+    <button class="tab on" data-view="plan"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Plan</button>
+    <button class="tab scan-tab" data-view="scan"><svg viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 011-1h3M16 4h3a1 1 0 011 1v3M20 16v3a1 1 0 01-1 1h-3M8 20H5a1 1 0 01-1-1v-3M7 12h10"/></svg>Eintragen</button>
+    <button class="tab" data-view="codes"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg>Schichten</button>
+    <button class="tab" data-view="settings"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>System</button>
+  </div>
+</nav>
+
+<!-- day editor -->
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="sheet-box stack">
+    <div class="grab"></div>
+    <div class="row between">
+      <div><div class="eyebrow" id="sheetDow"></div><h3 id="sheetTitle"></h3></div>
+      <button class="btn icon" id="sheetClose" aria-label="Schließen">✕</button>
+    </div>
+    <div class="codepick" id="codepick"></div>
+    <div class="two">
+      <label class="f"><span>Beginn</span><input type="time" id="edStart"></label>
+      <label class="f"><span>Ende</span><input type="time" id="edEnd"></label>
+    </div>
+    <label class="f"><span>Notiz</span><textarea id="edNote" placeholder="z. B. Tausch mit Anna, Fortbildung …"></textarea></label>
+    <div class="row between">
+      <button class="btn bear" id="edClear">Eintrag löschen</button>
+      <button class="btn gold" id="edSave">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
