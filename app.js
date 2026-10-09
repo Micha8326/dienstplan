@@ -1,7 +1,6 @@
 /* Liqstorm Dienstplan: photo roster recognition + editable personal shift calendar.
    Everything is stored locally in this browser (localStorage). */
 
-const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.127.0/+esm';
 const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js';
 const STORE_KEY = 'liqstorm.dienstplan.v1';
 
@@ -32,7 +31,7 @@ function load(){
   try { s = JSON.parse(localStorage.getItem(STORE_KEY)); } catch {}
   s = s && typeof s === 'object' ? s : {};
   return {
-    settings: Object.assign({name:'', apiKey:'', model:'claude-opus-5-5', mode:'claude'}, s.settings || {}),
+    settings: {name: typeof s.settings?.name === 'string' ? s.settings.name : ''},
     codes: Array.isArray(s.codes) && s.codes.length ? s.codes : DEFAULT_CODES.map(c => ({...c})),
     days: s.days && typeof s.days === 'object' ? s.days : {},
   };
@@ -86,12 +85,7 @@ function show(view){
 }
 document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => show(t.dataset.view)));
 
-function renderModePill(){
-  const p = $('#modePill'), s = state.settings;
-  if (s.mode === 'claude' && s.apiKey){ p.textContent = 'KI aktiv'; p.className = 'pill ok'; }
-  else if (s.mode === 'claude'){ p.textContent = 'Kein API-Schlüssel'; p.className = 'pill'; }
-  else { p.textContent = 'Offline-Modus'; p.className = 'pill warn'; }
-}
+function renderModePill(){ const p = $('#modePill'); p.textContent = 'Lokal · ohne KI'; p.className = 'pill warn'; }
 
 /* ---------- plan view ---------- */
 function renderPlan(){
@@ -255,24 +249,11 @@ $('#saveCodes').addEventListener('click', () => {
 /* ---------- settings view ---------- */
 function renderSettings(){
   const s = state.settings;
-  $('#setName').value = s.name; $('#setKey').value = s.apiKey; $('#setModel').value = s.model;
-  setModeUI(s.mode);
+  $('#setName').value = s.name;
 }
-function setModeUI(mode){
-  $('#modeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
-  $('#claudeBox').hidden = mode !== 'claude';
-  $('#modeHint').textContent = mode === 'claude'
-    ? 'Claude liest das Foto wie ein Mensch: findet deine Zeile, ordnet Kürzel den Tagen zu und markiert unsichere Stellen. Braucht Internet und einen API-Schlüssel (kostet pro Scan wenige Cent).'
-    : 'Texterkennung direkt im Browser, kostenlos und ohne Schlüssel. Bei Tabellen-Fotos deutlich ungenauer: Ergebnis immer prüfen.';
-}
-$('#modeSeg').querySelectorAll('button').forEach(b => b.addEventListener('click', () => setModeUI(b.dataset.mode)));
-$('#showKey').addEventListener('click', () => { const i = $('#setKey'); i.type = i.type === 'password' ? 'text' : 'password'; });
 $('#saveSettings').addEventListener('click', () => {
   const s = state.settings;
   s.name = $('#setName').value.trim();
-  s.apiKey = $('#setKey').value.trim();
-  s.model = $('#setModel').value;
-  s.mode = $('#modeSeg .on')?.dataset.mode || 'claude';
   save(); renderModePill(); toast('Einstellungen gespeichert');
 });
 
@@ -327,7 +308,7 @@ $('#icsAll').addEventListener('click', () => {
   toast(`${count} Termine exportiert`);
 });
 $('#backupBtn').addEventListener('click', () => {
-  const data = {...state, settings: {...state.settings, apiKey: ''}}; // never put the key into a file
+  const data = {...state, settings: {name: state.settings.name}};
   download(`dienstplan-backup-${keyOf(now.getFullYear(), now.getMonth(), now.getDate())}.json`, JSON.stringify(data, null, 2), 'application/json');
 });
 $('#restoreBtn').addEventListener('click', () => $('#restoreInput').click());
@@ -339,7 +320,7 @@ $('#restoreInput').addEventListener('change', async e => {
     if (!d || typeof d.days !== 'object' || !Array.isArray(d.codes)) throw new Error();
     if (!confirm('Backup laden? Dein aktueller Plan wird ersetzt.')) return;
     state.days = d.days; state.codes = d.codes;
-    Object.assign(state.settings, {...d.settings, apiKey: state.settings.apiKey});
+    if (typeof d.settings?.name === 'string') state.settings.name = d.settings.name;
     save(); renderSettings(); renderModePill(); toast('Backup geladen');
   } catch { toast('Diese Datei ist kein gültiges Dienstplan-Backup.'); }
 });
@@ -373,7 +354,7 @@ $('#galInput').addEventListener('change', e => { addFiles(e.target.files); e.tar
   d.addEventListener('drop', e => { e.preventDefault(); d.classList.remove('over'); addFiles(e.dataTransfer.files); });
 })();
 
-// Current Claude models read images up to 2576 px on the long edge; anything larger is downscaled by the API anyway.
+// Photos are downscaled for the in-browser text recognition and the preview.
 const MAX_SIDE = 2576;
 
 async function loadBitmap(file){
@@ -386,7 +367,7 @@ function canvasToImage(c, quality = 0.92){
   const dataUrl = c.toDataURL('image/jpeg', quality);
   return {dataUrl, base64: dataUrl.split(',')[1], mediaType: 'image/jpeg', w: c.width, h: c.height};
 }
-/** Overview image for the API (max 2576 px). The original file is kept so zoomed crops can be cut at full resolution later. */
+/** Downscaled copy for preview and text recognition. */
 async function prepareImage(file){
   const bmp = await loadBitmap(file);
   const ow = bmp.width, oh = bmp.height, s = Math.min(1, MAX_SIDE / Math.max(ow, oh));
@@ -424,15 +405,11 @@ $('#recognizeBtn').addEventListener('click', async () => {
   if (!name){ toast('Bitte deinen Namen eintragen, so wie er auf dem Plan steht.'); $('#scanName').focus(); return; }
   if (!(year >= 2000 && year <= 2100)){ toast('Bitte ein gültiges Jahr eintragen.'); return; }
   if (name !== state.settings.name){ state.settings.name = name; save(); }
-  const useClaude = state.settings.mode === 'claude';
-  if (useClaude && !state.settings.apiKey){
-    toast('Für die KI-Erkennung fehlt der API-Schlüssel (System).'); show('settings'); return;
-  }
   renderThumbs(true);
   $('#scanFallback').hidden = true;
-  setStatus('busy', useClaude ? 'Claude sucht deine Zeile' : 'Texterkennung läuft');
+  setStatus('busy', 'Texterkennung läuft');
   try {
-    const r = useClaude ? await recognizeWithClaude({year, month, name}) : await recognizeOffline({year, month, name});
+    const r = await recognizeOffline({year, month, name});
     scanResult = {year, month, ...r};
     renderReview();
     const found = Object.values(scanResult.entries).filter(e => e.code).length;
@@ -448,258 +425,7 @@ $('#recognizeBtn').addEventListener('click', async () => {
   }
 });
 
-/* --- Claude vision recognition --- */
-let sdkPromise = null;
-const loadSdk = () => (sdkPromise ??= import(SDK_URL).then(m => m.default || m.Anthropic));
-
-const RESULT_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['person_found', 'matched_name', 'entries', 'unknown_codes', 'notes'],
-  properties: {
-    person_found: {type: 'boolean'},
-    matched_name: {type: 'string', description: 'Name exactly as printed on the roster row that was used, or empty.'},
-    entries: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['day', 'code', 'start', 'end', 'uncertain'],
-        properties: {
-          day: {type: 'integer', description: 'Day of month, 1-31.'},
-          code: {type: 'string', description: 'Shift code exactly as printed in the cell, or empty string if the cell is blank.'},
-          start: {type: 'string', description: 'HH:MM if a start time is printed for this day, else empty.'},
-          end: {type: 'string', description: 'HH:MM if an end time is printed for this day, else empty.'},
-          uncertain: {type: 'boolean', description: 'True if the cell was hard to read or the column/day mapping is doubtful.'},
-        },
-      },
-    },
-    unknown_codes: {
-      type: 'array',
-      description: 'Codes found in the row that are not in the known list, with their meaning if a legend on the roster explains them.',
-      items: {
-        type: 'object', additionalProperties: false, required: ['code', 'label', 'start', 'end'],
-        properties: {code: {type: 'string'}, label: {type: 'string'}, start: {type: 'string'}, end: {type: 'string'}},
-      },
-    },
-    notes: {type: 'string', description: 'Short note in German for the user about problems (blurry area, multiple matching names, cut-off days). Empty if none.'},
-  },
-};
-
-const READ_PROMPT = `Du liest fotografierte Dienstpläne (Schichtpläne), vor allem aus Krankenhaus und Pflege.
-
-Aufgabe: Gib für jeden Tag des angegebenen Monats das Dienstkürzel der genannten Person zurück.
-
-Du bekommst je Foto eine Übersicht und, falls die Zeile der Person gefunden wurde, vergrößerte Ausschnitte in voller Auflösung. Jeder Ausschnitt zeigt oben die Kopfzeile mit Tagesnummern bzw. Wochentagen und darunter die Zeile der Person zwischen zwei orangen Linien, links die Namensspalte. Lies die Zellen aus den Ausschnitten, die Übersicht dient nur zur Orientierung. Benachbarte Ausschnitte überlappen sich um etwa eine Spalte.
-
-Regeln:
-- Ordne jede Zelle über die Tagesnummer in der Kopfzeile dem Tag zu, nicht durch Abzählen. Prüfe die Zuordnung an Wochenenden und Wochentagen gegen den Kalender des Monats.
-- Übernimm Kürzel genau so, wie sie in der Zelle stehen (z. B. "F", "S2", "N", "U", "/"). Handschriftliche Korrekturen oder Durchstreichungen haben Vorrang vor dem gedruckten Wert. Stehen zwei Kürzel in einer Zelle, gib das gültige zurück und setze uncertain=true.
-- Leere Zellen bekommen code "". Erfinde keine Werte. Wenn du dir bei einer Zelle nicht sicher bist, gib deine beste Lesart an und setze uncertain=true.
-- Wenn der Plan eine Legende mit Uhrzeiten oder Bedeutungen der Kürzel hat, nutze sie für unknown_codes. Uhrzeiten, die direkt in einer Zelle stehen, kommen in start/end dieses Tages.
-- Fehlen Tage auf allen Fotos, lass sie leer und nenne das in notes.
-- Gib für jeden Tag des Monats genau einen Eintrag zurück, auch für leere Tage.`;
-
-const LOCATE_PROMPT = `Du bekommst ein Foto eines Dienstplans (Tabelle: Namen in Zeilen, Tage in Spalten, oder umgekehrt). Finde die Zeile der genannten Person und gib Pixelkoordinaten im gelieferten Bild zurück (Ursprung oben links, x nach rechts, y nach unten). Die Koordinaten werden benutzt, um Ausschnitte in voller Auflösung zu schneiden, also lieber etwas großzügig als zu knapp. Liegen die Tage in Zeilen und die Namen in Spalten, setze transposed=true und lass die Koordinaten 0.`;
-
-const LOCATE_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['person_found', 'matched_name', 'transposed', 'header_found', 'header_top', 'header_bottom', 'table_left', 'days_left', 'days_right',
-    'first_day', 'last_day', 'row_top_left', 'row_bottom_left', 'row_top_right', 'row_bottom_right'],
-  properties: {
-    person_found: {type: 'boolean'},
-    matched_name: {type: 'string', description: 'Name as printed in the row that was found, or empty.'},
-    transposed: {type: 'boolean', description: 'True if days run down the rows and people across the columns.'},
-    header_found: {type: 'boolean', description: 'True if the header row with day numbers is visible in this photo.'},
-    header_top: {type: 'integer', description: 'y of the top edge of the header row(s) with day numbers and weekdays.'},
-    header_bottom: {type: 'integer', description: 'y of the bottom edge of that header.'},
-    table_left: {type: 'integer', description: 'x of the left edge of the name column.'},
-    days_left: {type: 'integer', description: 'x of the left edge of the first visible day column.'},
-    days_right: {type: 'integer', description: 'x of the right edge of the last visible day column.'},
-    first_day: {type: 'integer', description: 'Day number of the first visible day column.'},
-    last_day: {type: 'integer', description: 'Day number of the last visible day column.'},
-    row_top_left: {type: 'integer', description: 'y of the top edge of the person\'s row at x = days_left.'},
-    row_bottom_left: {type: 'integer', description: 'y of the bottom edge of the person\'s row at x = days_left.'},
-    row_top_right: {type: 'integer', description: 'y of the top edge of the person\'s row at x = days_right.'},
-    row_bottom_right: {type: 'integer', description: 'y of the bottom edge of the person\'s row at x = days_right.'},
-  },
-};
-
-function apiErrorMessage(Anthropic, err){
-  if (err instanceof Anthropic.AuthenticationError) return 'Der API-Schlüssel wurde abgelehnt. Bitte unter System prüfen.';
-  if (err instanceof Anthropic.PermissionDeniedError) return 'Der API-Schlüssel hat keinen Zugriff auf dieses Modell.';
-  if (err instanceof Anthropic.NotFoundError) return 'Dieses Modell gibt es nicht. Bitte unter System ein anderes wählen.';
-  if (err instanceof Anthropic.RateLimitError) return 'Zu viele Anfragen oder Guthaben aufgebraucht. Kurz warten bzw. Guthaben in der Anthropic Console prüfen.';
-  if (err instanceof Anthropic.BadRequestError) return 'Die Anfrage wurde abgelehnt: ' + (err.error?.error?.message || err.message);
-  if (err instanceof Anthropic.APIConnectionError) return 'Keine Verbindung zur Anthropic-API. Internet prüfen.';
-  if (err instanceof Anthropic.APIError) return `API-Fehler (${err.status ?? '?'}). Bitte später erneut versuchen.`;
-  return '';
-}
-
-/** One structured-output request; returns the parsed JSON object. */
-async function askClaude(client, Anthropic, {system, content, schema, effort}){
-  const model = state.settings.model || 'claude-opus-5-5';
-  const isHaiku = model.startsWith('claude-haiku');
-  const params = {
-    model,
-    max_tokens: 16000,
-    system,
-    output_config: isHaiku ? {format: {type: 'json_schema', schema}} : {effort, format: {type: 'json_schema', schema}},
-    messages: [{role: 'user', content}],
-  };
-  // Server-side refusal fallback (Opus 5.5 / Sonnet 5.5, not Haiku).
-  if (!isHaiku){ params.betas = ['server-side-fallback-2026-07-01']; params.fallbacks = 'default'; }
-  let res;
-  try { res = await client.beta.messages.create(params); }
-  catch (err){ const e = new Error(err.message); e.userMessage = apiErrorMessage(Anthropic, err); throw e; }
-  if (res.stop_reason === 'refusal'){ const e = new Error('refusal'); e.userMessage = 'Die Anfrage wurde vom Modell abgelehnt. Bitte ein anderes Foto versuchen.'; throw e; }
-  if (res.stop_reason === 'max_tokens'){ const e = new Error('max_tokens'); e.userMessage = 'Antwort wurde abgeschnitten. Bitte mit weniger Fotos erneut versuchen.'; throw e; }
-  const text = res.content.filter(b => b.type === 'text').map(b => b.text).join('');
-  try { return JSON.parse(text); }
-  catch { const e = new Error('parse'); e.userMessage = 'Die Antwort konnte nicht gelesen werden. Bitte erneut versuchen.'; throw e; }
-}
-
-/** Pass 1: where is the person's row on this photo? Returns null if not usable. */
-async function locateRow(client, Anthropic, photo, name, year, month){
-  const loc = await askClaude(client, Anthropic, {
-    system: LOCATE_PROMPT, effort: 'high', schema: LOCATE_SCHEMA,
-    content: [
-      {type: 'image', source: {type: 'base64', media_type: photo.mediaType, data: photo.base64}},
-      {type: 'text', text: `Person: ${name}\nMonat: ${MONTHS[month]} ${year} (${daysIn(year, month)} Tage)\nBildgröße: ${photo.w} × ${photo.h} Pixel`},
-    ],
-  });
-  const {w, h} = photo, n = daysIn(year, month);
-  const rowH = ((loc.row_bottom_left - loc.row_top_left) + (loc.row_bottom_right - loc.row_top_right)) / 2;
-  const ok = loc.person_found && !loc.transposed
-    && loc.days_right - loc.days_left > w * 0.15 && loc.days_left >= 0 && loc.days_right <= w * 1.02
-    && rowH >= 3 && rowH < h * 0.2
-    && [loc.row_top_left, loc.row_top_right, loc.row_bottom_left, loc.row_bottom_right].every(y => y >= 0 && y <= h)
-    && loc.first_day >= 1 && loc.last_day <= n && loc.last_day >= loc.first_day;
-  return ok ? {...loc, rowH} : null;
-}
-
-/** Cut full-resolution crops around the person's row: header band on top, row band below, name column on the left. */
-async function buildTiles(photo, loc){
-  const bmp = await loadBitmap(photo.file);
-  const s = bmp.width / photo.w;                      // overview px -> original px
-  const W = bmp.width, H = bmp.height;
-  const clampX = v => Math.max(0, Math.min(W, v)), clampY = v => Math.max(0, Math.min(H, v));
-  const dl = loc.days_left * s, dr = loc.days_right * s;
-  const visible = loc.last_day - loc.first_day + 1, dayW = (dr - dl) / visible;
-  const lerp = (a, b, x) => (a + (b - a) * ((x - dl) / Math.max(1, dr - dl))) * s;
-  const top = x => lerp(loc.row_top_left, loc.row_top_right, x), bot = x => lerp(loc.row_bottom_left, loc.row_bottom_right, x);
-  const rowH = loc.rowH * s, pad = rowH * 1.1;
-
-  // name column: left part only, names are usually left-aligned
-  const tl = Math.min(loc.table_left, loc.days_left) * s;
-  const nameW = Math.max(0, Math.min(dl - tl, Math.max(dayW * 4, 600)));
-  const hasHeader = loc.header_found && loc.header_bottom > loc.header_top;
-  const hPad = hasHeader ? (loc.header_bottom - loc.header_top) * s * 0.25 : 0;
-  const hy0 = hasHeader ? clampY(loc.header_top * s - hPad) : 0, hy1 = hasHeader ? clampY(loc.header_bottom * s + hPad) : 0;
-
-  const k = Math.max(1, Math.min(4, Math.ceil((dr - dl) / 1500)));
-  const tiles = [];
-  for (let i = 0; i < k; i++){
-    const a = Math.floor(i * visible / k), b = Math.floor((i + 1) * visible / k) - 1;
-    const x0 = clampX(dl + a * dayW - dayW * 0.6), x1 = clampX(dl + (b + 1) * dayW + dayW * 0.6);
-    const y0 = clampY(Math.min(top(x0), top(x1), top(tl)) - pad), y1 = clampY(Math.max(bot(x0), bot(x1), bot(tl)) + pad);
-    const hh = hy1 - hy0, bh = y1 - y0, gap = hasHeader ? Math.max(6, Math.round(rowH * 0.25)) : 0;
-    const cw = Math.round(nameW + 4 + (x1 - x0)), ch = Math.round(hh + gap + bh);
-    if (x1 - x0 < 10 || bh < 10) continue;
-    const f = Math.min(2, MAX_SIDE / Math.max(cw, ch));  // upscale small crops a little, never above the API limit
-    const c = document.createElement('canvas'); c.width = Math.round(cw * f); c.height = Math.round(ch * f);
-    const g = c.getContext('2d');
-    g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
-    g.imageSmoothingQuality = 'high';
-    const put = (sx, sy, sw, sh, dx, dy) => { if (sw > 1 && sh > 1) g.drawImage(bmp, sx, sy, sw, sh, dx * f, dy * f, sw * f, sh * f); };
-    if (hasHeader){ put(tl, hy0, nameW, hh, 0, 0); put(x0, hy0, x1 - x0, hh, nameW + 4, 0); }
-    const by = hh + gap;
-    put(tl, y0, nameW, bh, 0, by); put(x0, y0, x1 - x0, bh, nameW + 4, by);
-    // separators and row markers
-    g.fillStyle = '#9aa4b2';
-    if (hasHeader) g.fillRect(0, hh * f, c.width, gap * f);
-    g.fillRect(nameW * f, 0, 4 * f, c.height);
-    g.strokeStyle = 'rgba(255,120,0,.9)'; g.lineWidth = Math.max(2, 2 * f);
-    const line = (yA, yB, off) => { g.beginPath(); g.moveTo(0, (by + yA - y0 + off) * f); g.lineTo(c.width, (by + yB - y0 + off) * f); g.stroke(); };
-    line(top(tl), top(x1), -3); line(bot(tl), bot(x1), 3);
-    tiles.push({...canvasToImage(c), from: loc.first_day + a, to: loc.first_day + b});
-  }
-  bmp.close?.();
-  return tiles;
-}
-
-async function recognizeWithClaude({year, month, name}){
-  const Anthropic = await loadSdk().catch(() => {
-    const e = new Error('sdk'); e.userMessage = 'Die KI-Bibliothek konnte nicht geladen werden. Besteht eine Internetverbindung?'; throw e;
-  });
-  const client = new Anthropic({apiKey: state.settings.apiKey, dangerouslyAllowBrowser: true});
-  const n = daysIn(year, month);
-  const firstDow = DOW_LONG[dowIdx(year, month, 1)];
-  const known = state.codes.map(c => `${c.code} = ${c.label}${c.start ? ` (${c.start}–${c.end})` : ''}`).join('\n');
-  const weekends = [];
-  for (let d = 1; d <= n; d++) if (dowIdx(year, month, d) > 4) weekends.push(`${d}. (${DOW[dowIdx(year, month, d)]})`);
-
-  // Pass 1: find the row on every photo (in parallel). A failed lookup only means that photo gets no zoomed crops.
-  const located = await Promise.all(photos.map(p => locateRow(client, Anthropic, p, name, year, month).catch(err => {
-    if (!['refusal', 'max_tokens', 'parse'].includes(err.message)) throw err; // key / network problems stop the scan
-    return null;
-  })));
-  setStatus('busy', 'Claude liest die Ausschnitte');
-
-  const content = [];
-  let tileCount = 0;
-  for (let i = 0; i < photos.length; i++){
-    const p = photos[i];
-    content.push({type: 'text', text: `Foto ${i + 1}, Übersicht:`});
-    content.push({type: 'image', source: {type: 'base64', media_type: p.mediaType, data: p.base64}});
-    if (!located[i]) continue;
-    let tiles = [];
-    try { tiles = await buildTiles(p, located[i]); } catch (err){ console.error(err); }
-    tiles.forEach((t, j) => {
-      content.push({type: 'text', text: `Foto ${i + 1}, Ausschnitt ${j + 1} von ${tiles.length}: Tagesspalten etwa ${t.from} bis ${t.to}, Zeile „${located[i].matched_name}“ zwischen den orangen Linien.`});
-      content.push({type: 'image', source: {type: 'base64', media_type: t.mediaType, data: t.base64}});
-    });
-    tileCount += tiles.length;
-  }
-  content.push({type: 'text', text:
-`Person: ${name}
-Monat: ${MONTHS[month]} ${year} (${n} Tage, der 1. ist ein ${firstDow})
-Wochenenden: ${weekends.join(', ')}
-Anzahl Fotos: ${photos.length}
-
-Bekannte Kürzel dieser Person:
-${known}
-
-Lies die Dienste dieser Person für jeden Tag 1 bis ${n} aus.`});
-
-  const data = await askClaude(client, Anthropic, {system: READ_PROMPT, effort: 'high', schema: RESULT_SCHEMA, content});
-
-  // Learn codes from the roster legend that the user hasn't defined yet.
-  for (const u of data.unknown_codes || []){
-    const code = String(u.code || '').trim();
-    if (!code || codeDef(code)) continue;
-    const hasTimes = isTime(u.start) && isTime(u.end);
-    state.codes.push({code, label: u.label?.trim() || code, start: hasTimes ? u.start : '', end: hasTimes ? u.end : '', color: '#94a3b8', kind: hasTimes ? 'work' : 'off'});
-  }
-  save();
-
-  const entries = {};
-  for (const e of data.entries || []){
-    const d = Number(e.day);
-    if (!(d >= 1 && d <= n)) continue;
-    entries[d] = {code: String(e.code || '').trim(), start: isTime(e.start) ? e.start : '', end: isTime(e.end) ? e.end : '', uncertain: !!e.uncertain};
-  }
-  const notes = [
-    data.person_found ? '' : 'Name wurde auf dem Foto nicht sicher gefunden.',
-    data.matched_name ? `Gelesene Zeile: „${data.matched_name}“.` : '',
-    tileCount ? '' : 'Deine Zeile konnte nicht vergrößert werden, gelesen wurde nur die Übersicht. Ein näheres, geraderes Foto hilft.',
-    data.notes || '',
-  ].filter(Boolean).join(' ');
-  return {entries, notes};
-}
-
-/* --- offline OCR fallback (tesseract.js) --- */
+/* --- offline text recognition (tesseract.js, runs in the browser) --- */
 let tessPromise = null;
 function loadTesseract(){
   return tessPromise ??= new Promise((res, rej) => {
@@ -734,7 +460,7 @@ async function recognizeOffline({year, month, name}){
   } finally { await worker.terminate(); }
   const entries = {};
   for (let d = 1; d <= n; d++) entries[d] = {code: '', start: '', end: '', uncertain: true};
-  if (!best) return {entries, notes: 'Dein Name wurde im erkannten Text nicht gefunden. Tipp: KI-Erkennung nutzen oder die Tage unten von Hand setzen.'};
+  if (!best) return {entries, notes: 'Dein Name wurde im erkannten Text nicht gefunden. Tipp: Foto näher und gerader aufnehmen oder die Dienste manuell eintragen.'};
   // Assume the row lists one cell per day in order; map known codes, treat "-" or "/" as a day off.
   const off = state.codes.find(c => c.kind === 'off')?.code || '';
   best.tokens.slice(0, n).forEach((t, i) => {
@@ -799,7 +525,7 @@ $('#applyBtn').addEventListener('click', () => {
 });
 
 /* ---------- manual entry ---------- */
-let entryMode = 'photo', brush = null;
+let entryMode = 'manual', brush = null;
 const drafts = {};   // 'YYYY-MM' -> {year, month, days:{d: code}}
 
 function setEntryMode(mode){
@@ -917,6 +643,7 @@ $('#manualSaveBtn').addEventListener('click', () => {
 })();
 
 /* ---------- boot ---------- */
+save(); // rewrites storage without settings of the former API version (key, model)
 renderModePill();
 renderPlan();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});

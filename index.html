@@ -306,7 +306,7 @@
   <section class="view" id="view-scan">
     <div class="eyebrow">Eintragen</div>
     <h2>Dienstplan eintragen.</h2>
-    <p class="sub">Monat wählen, dann den Plan fotografieren und erkennen lassen oder die Dienste von Hand eintragen. Beides landet in deinem Plan.</p>
+    <p class="sub">Monat wählen, dann die Dienste von Hand eintragen oder den Plan fotografieren und im Browser auslesen lassen. Beides landet in deinem Plan.</p>
     <div class="stack">
       <div class="panel hud-corners stack">
         <div class="two keep">
@@ -314,12 +314,12 @@
           <label class="f"><span>Jahr</span><input type="number" id="scanYear" min="2000" max="2100" inputmode="numeric"></label>
         </div>
         <div class="seg wide" id="entrySeg" role="tablist">
-          <button type="button" data-entry="photo" class="on">Foto-Erkennung</button>
-          <button type="button" data-entry="manual">Manuelle Eingabe</button>
+          <button type="button" data-entry="manual" class="on">Manuelle Eingabe</button>
+          <button type="button" data-entry="photo">Foto auslesen</button>
         </div>
       </div>
 
-      <div class="panel hud-corners stack" id="photoPanel">
+      <div class="panel hud-corners stack" id="photoPanel" hidden>
         <label class="f"><span>Dein Name auf dem Plan</span><input type="text" id="scanName" placeholder="z. B. Müller, M." autocomplete="off"></label>
         <div class="drop" id="drop">
           <div class="eyebrow" style="margin:0">Fotos</div>
@@ -342,7 +342,7 @@
         </div>
       </div>
 
-      <div class="panel hud-corners stack" id="manualPanel" hidden>
+      <div class="panel hud-corners stack" id="manualPanel">
         <div class="row between">
           <div>
             <div class="eyebrow">Manuelle Eingabe</div>
@@ -371,7 +371,7 @@
           <span class="pill" id="reviewCount"></span>
         </div>
         <div class="notes" id="reviewNotes" hidden></div>
-        <p class="hint" style="margin:0">Gold markierte Tage waren auf dem Foto unsicher. Bitte kurz gegenprüfen.</p>
+        <p class="hint" style="margin:0">Die Texterkennung ist ungenau. Bitte jeden Tag mit dem Aushang vergleichen.</p>
         <div class="review" id="review"></div>
         <label class="check"><input type="checkbox" id="keepManual" checked>Von Hand geänderte Tage nicht überschreiben</label>
         <div class="row end">
@@ -406,24 +406,7 @@
       <div class="panel hud-corners stack">
         <label class="f"><span>Dein Name auf dem Plan</span><input type="text" id="setName" placeholder="z. B. Müller, M." autocomplete="off"></label>
         <p class="hint" style="margin-top:-6px">So, wie er in der Namensspalte steht. Mehrere Schreibweisen mit Komma trennen geht nicht, nimm die genaueste.</p>
-        <div class="f" style="display:grid;gap:6px">
-          <span class="hint" style="font-family:Rajdhani,sans-serif;font-weight:600;letter-spacing:.14em;text-transform:uppercase;font-size:12px">Erkennung</span>
-          <div class="seg" id="modeSeg"><button data-mode="claude">KI-Erkennung</button><button data-mode="offline">Offline-Texterkennung</button></div>
-          <p class="hint" id="modeHint"></p>
-        </div>
-        <div id="claudeBox" class="stack">
-          <label class="f"><span>Anthropic API-Schlüssel</span>
-            <div class="row" style="flex-wrap:nowrap"><input type="password" id="setKey" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"><button class="btn icon" id="showKey" type="button" aria-label="Schlüssel zeigen">👁</button></div>
-          </label>
-          <p class="hint" style="margin-top:-6px">Bekommst du unter <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. Wird nur in diesem Browser gespeichert und direkt an die Anthropic-API geschickt. Leg dir dort am besten ein kleines Ausgabenlimit fest.</p>
-          <label class="f"><span>Modell</span>
-            <select id="setModel">
-              <option value="claude-opus-5-5">Claude Opus 5.5 · genaueste Erkennung</option>
-              <option value="claude-sonnet-5-5">Claude Sonnet 5.5 · schneller, günstiger</option>
-              <option value="claude-haiku-4-5">Claude Haiku 4.5 · am günstigsten, ungenauer</option>
-            </select>
-          </label>
-        </div>
+        <p class="hint" style="margin:0">Die Foto-Erkennung läuft komplett im Browser, ohne KI und ohne Kosten. Bei schwer lesbaren Plänen ist die manuelle Eingabe schneller.</p>
         <div class="row end"><button class="btn gold" id="saveSettings">Speichern</button></div>
       </div>
 
